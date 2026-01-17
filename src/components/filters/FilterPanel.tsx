@@ -1,9 +1,9 @@
 // ============================================================================
 // Filter Panel Component
-// Combined filter panel with all filter types
+// Combined filter panel (optimized with memoization)
 // ============================================================================
 
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   Box,
   Paper,
@@ -47,12 +47,12 @@ interface FilterPanelProps {
 }
 
 // -----------------------------------------------------------------------------
-// Filter Content Component
+// Filter Content Component (Memoized)
 // -----------------------------------------------------------------------------
 
 interface FilterContentProps extends Omit<FilterPanelProps, 'mobileOpen' | 'onMobileClose'> {}
 
-const FilterContent: React.FC<FilterContentProps> = ({
+const FilterContent: React.FC<FilterContentProps> = React.memo(({
   filters,
   airlineOptions,
   priceRange,
@@ -63,13 +63,17 @@ const FilterContent: React.FC<FilterContentProps> = ({
   hasActiveFilters,
   disabled = false,
 }) => {
-  const activeFilterCount =
-    filters.stops.length +
-    filters.airlines.length +
-    (filters.priceRange.min > priceRange.min ||
-    filters.priceRange.max < priceRange.max
-      ? 1
-      : 0);
+  // Memoized active filter count
+  const activeFilterCount = useMemo(() => {
+    return (
+      filters.stops.length +
+      filters.airlines.length +
+      (filters.priceRange.min > priceRange.min ||
+      filters.priceRange.max < priceRange.max
+        ? 1
+        : 0)
+    );
+  }, [filters.stops.length, filters.airlines.length, filters.priceRange, priceRange]);
 
   return (
     <Box sx={{ p: 2.5 }}>
@@ -143,16 +147,23 @@ const FilterContent: React.FC<FilterContentProps> = ({
       </Box>
     </Box>
   );
-};
+});
+
+FilterContent.displayName = 'FilterContent';
 
 // -----------------------------------------------------------------------------
 // Main Filter Panel Component
 // -----------------------------------------------------------------------------
 
-export const FilterPanel: React.FC<FilterPanelProps> = (props) => {
+const FilterPanelComponent: React.FC<FilterPanelProps> = (props) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const { mobileOpen = false, onMobileClose } = props;
+
+  // Memoized close handler
+  const handleClose = useCallback(() => {
+    onMobileClose?.();
+  }, [onMobileClose]);
 
   // Mobile Drawer
   if (isMobile) {
@@ -160,7 +171,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = (props) => {
       <Drawer
         anchor="left"
         open={mobileOpen}
-        onClose={onMobileClose}
+        onClose={handleClose}
         PaperProps={{
           sx: {
             width: '85%',
@@ -181,7 +192,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = (props) => {
           <Typography variant="h6" fontWeight={600}>
             Filters
           </Typography>
-          <IconButton onClick={onMobileClose} edge="end">
+          <IconButton onClick={handleClose} edge="end">
             <Close />
           </IconButton>
         </Box>
@@ -192,7 +203,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = (props) => {
           <Button
             variant="contained"
             fullWidth
-            onClick={onMobileClose}
+            onClick={handleClose}
             size="large"
           >
             Apply Filters
@@ -218,5 +229,8 @@ export const FilterPanel: React.FC<FilterPanelProps> = (props) => {
     </Paper>
   );
 };
+
+// Export memoized component
+export const FilterPanel = React.memo(FilterPanelComponent);
 
 export default FilterPanel;

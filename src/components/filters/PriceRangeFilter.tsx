@@ -1,9 +1,9 @@
 // ============================================================================
 // Price Range Filter Component
-// Dual-handle slider for price filtering
+// Dual-handle slider with debounced input (optimized for performance)
 // ============================================================================
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import type { PriceRange } from '../../types';
 import { formatPrice } from '../../utils/formatters';
+import { useDebouncedCallback } from '../../hooks';
 
 // -----------------------------------------------------------------------------
 // Types
@@ -28,10 +29,16 @@ interface PriceRangeFilterProps {
 }
 
 // -----------------------------------------------------------------------------
+// Constants
+// -----------------------------------------------------------------------------
+
+const DEBOUNCE_DELAY = 300; // ms
+
+// -----------------------------------------------------------------------------
 // Component
 // -----------------------------------------------------------------------------
 
-export const PriceRangeFilter: React.FC<PriceRangeFilterProps> = ({
+const PriceRangeFilterComponent: React.FC<PriceRangeFilterProps> = ({
   value,
   onChange,
   min,
@@ -53,30 +60,79 @@ export const PriceRangeFilter: React.FC<PriceRangeFilterProps> = ({
     ]);
   }, [value, min, max]);
 
-  const handleSliderChange = (_event: Event, newValue: number | number[]) => {
-    const [newMin, newMax] = newValue as [number, number];
-    setLocalValue([newMin, newMax]);
-  };
+  // Debounced onChange for input fields to prevent excessive updates
+  const debouncedOnChange = useDebouncedCallback(
+    (newRange: PriceRange) => {
+      onChange(newRange);
+    },
+    DEBOUNCE_DELAY
+  );
 
-  const handleSliderCommit = (_event: Event | React.SyntheticEvent, newValue: number | number[]) => {
-    const [newMin, newMax] = newValue as [number, number];
-    onChange({ min: newMin, max: newMax });
-  };
+  // Memoize step calculation
+  const step = useMemo(() => Math.max(1, Math.round((max - min) / 100)), [max, min]);
 
-  const handleInputChange = (type: 'min' | 'max', inputValue: string) => {
-    const numValue = parseInt(inputValue, 10) || 0;
-    if (type === 'min') {
-      const newMin = Math.max(min, Math.min(numValue, localValue[1]));
-      setLocalValue([newMin, localValue[1]]);
-      onChange({ min: newMin, max: localValue[1] });
-    } else {
-      const newMax = Math.min(max, Math.max(numValue, localValue[0]));
-      setLocalValue([localValue[0], newMax]);
-      onChange({ min: localValue[0], max: newMax });
-    }
-  };
+  // Memoize slider value label formatter
+  const valueLabelFormat = useCallback(
+    (val: number) => formatPrice(val, currency),
+    [currency]
+  );
 
-  const step = Math.max(1, Math.round((max - min) / 100));
+  // Handle slider change (local only, no external update yet)
+  const handleSliderChange = useCallback(
+    (_event: Event, newValue: number | number[]) => {
+      const [newMin, newMax] = newValue as [number, number];
+      setLocalValue([newMin, newMax]);
+    },
+    []
+  );
+
+  // Handle slider commit (update external state)
+  const handleSliderCommit = useCallback(
+    (_event: Event | React.SyntheticEvent, newValue: number | number[]) => {
+      const [newMin, newMax] = newValue as [number, number];
+      onChange({ min: newMin, max: newMax });
+    },
+    [onChange]
+  );
+
+  // Handle input change with debouncing
+  const handleInputChange = useCallback(
+    (type: 'min' | 'max', inputValue: string) => {
+      const numValue = parseInt(inputValue, 10) || 0;
+      
+      if (type === 'min') {
+        const newMin = Math.max(min, Math.min(numValue, localValue[1]));
+        setLocalValue([newMin, localValue[1]]);
+        debouncedOnChange({ min: newMin, max: localValue[1] });
+      } else {
+        const newMax = Math.min(max, Math.max(numValue, localValue[0]));
+        setLocalValue([localValue[0], newMax]);
+        debouncedOnChange({ min: localValue[0], max: newMax });
+      }
+    },
+    [min, max, localValue, debouncedOnChange]
+  );
+
+  // Memoize input handlers
+  const handleMinChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      handleInputChange('min', e.target.value);
+    },
+    [handleInputChange]
+  );
+
+  const handleMaxChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      handleInputChange('max', e.target.value);
+    },
+    [handleInputChange]
+  );
+
+  // Memoize display text
+  const rangeDisplayText = useMemo(
+    () => `${formatPrice(localValue[0], currency)} - ${formatPrice(localValue[1], currency)}`,
+    [localValue, currency]
+  );
 
   return (
     <Box>
@@ -91,7 +147,7 @@ export const PriceRangeFilter: React.FC<PriceRangeFilterProps> = ({
           onChange={handleSliderChange}
           onChangeCommitted={handleSliderCommit}
           valueLabelDisplay="auto"
-          valueLabelFormat={(val) => formatPrice(val, currency)}
+          valueLabelFormat={valueLabelFormat}
           min={min}
           max={max}
           step={step}
@@ -112,7 +168,7 @@ export const PriceRangeFilter: React.FC<PriceRangeFilterProps> = ({
           label="Min"
           type="number"
           value={localValue[0]}
-          onChange={(e) => handleInputChange('min', e.target.value)}
+          onChange={handleMinChange}
           disabled={disabled}
           InputProps={{
             startAdornment: (
@@ -131,7 +187,7 @@ export const PriceRangeFilter: React.FC<PriceRangeFilterProps> = ({
           label="Max"
           type="number"
           value={localValue[1]}
-          onChange={(e) => handleInputChange('max', e.target.value)}
+          onChange={handleMaxChange}
           disabled={disabled}
           InputProps={{
             startAdornment: (
@@ -153,11 +209,27 @@ export const PriceRangeFilter: React.FC<PriceRangeFilterProps> = ({
         color="text.secondary"
         sx={{ display: 'block', mt: 1, textAlign: 'center' }}
       >
-        {formatPrice(localValue[0], currency)} -{' '}
-        {formatPrice(localValue[1], currency)}
+        {rangeDisplayText}
       </Typography>
     </Box>
   );
 };
+
+// Custom comparison for memoization
+const arePropsEqual = (
+  prevProps: PriceRangeFilterProps,
+  nextProps: PriceRangeFilterProps
+): boolean => {
+  return (
+    prevProps.value.min === nextProps.value.min &&
+    prevProps.value.max === nextProps.value.max &&
+    prevProps.min === nextProps.min &&
+    prevProps.max === nextProps.max &&
+    prevProps.disabled === nextProps.disabled &&
+    prevProps.currency === nextProps.currency
+  );
+};
+
+export const PriceRangeFilter = React.memo(PriceRangeFilterComponent, arePropsEqual);
 
 export default PriceRangeFilter;

@@ -1,9 +1,9 @@
 // ============================================================================
 // Stops Filter Component
-// Filter flights by number of stops
+// Filter flights by number of stops (optimized with memoization)
 // ============================================================================
 
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -24,7 +24,7 @@ interface StopsFilterProps {
 }
 
 // -----------------------------------------------------------------------------
-// Stop Options
+// Constants
 // -----------------------------------------------------------------------------
 
 const STOP_OPTIONS: { value: StopFilter; label: string; description: string }[] = [
@@ -34,21 +34,77 @@ const STOP_OPTIONS: { value: StopFilter; label: string; description: string }[] 
 ];
 
 // -----------------------------------------------------------------------------
+// Stop Checkbox Item (Memoized)
+// -----------------------------------------------------------------------------
+
+interface StopCheckboxProps {
+  option: typeof STOP_OPTIONS[0];
+  isSelected: boolean;
+  disabled: boolean;
+  onChange: (value: StopFilter) => void;
+}
+
+const StopCheckbox: React.FC<StopCheckboxProps> = React.memo(
+  ({ option, isSelected, disabled, onChange }) => {
+    const handleChange = useCallback(() => {
+      onChange(option.value);
+    }, [option.value, onChange]);
+
+    return (
+      <FormControlLabel
+        disabled={disabled}
+        control={
+          <Checkbox
+            checked={isSelected}
+            onChange={handleChange}
+            size="small"
+          />
+        }
+        label={
+          <Box>
+            <Typography variant="body2">{option.label}</Typography>
+          </Box>
+        }
+        sx={{
+          ml: 0,
+          mb: 0.5,
+          '& .MuiFormControlLabel-label': {
+            flex: 1,
+          },
+        }}
+      />
+    );
+  }
+);
+
+StopCheckbox.displayName = 'StopCheckbox';
+
+// -----------------------------------------------------------------------------
 // Component
 // -----------------------------------------------------------------------------
 
-export const StopsFilter: React.FC<StopsFilterProps> = ({
+const StopsFilterComponent: React.FC<StopsFilterProps> = ({
   selectedStops,
   onChange,
   disabled = false,
 }) => {
-  const handleChange = (stopValue: StopFilter) => {
-    if (selectedStops.includes(stopValue)) {
-      onChange(selectedStops.filter((s) => s !== stopValue));
-    } else {
-      onChange([...selectedStops, stopValue]);
-    }
-  };
+  // Selected stops set for O(1) lookup
+  const selectedSet = useMemo(
+    () => new Set(selectedStops),
+    [selectedStops]
+  );
+
+  // Memoized handler
+  const handleToggle = useCallback(
+    (stopValue: StopFilter) => {
+      if (selectedStops.includes(stopValue)) {
+        onChange(selectedStops.filter((s) => s !== stopValue));
+      } else {
+        onChange([...selectedStops, stopValue]);
+      }
+    },
+    [selectedStops, onChange]
+  );
 
   return (
     <Box>
@@ -57,33 +113,34 @@ export const StopsFilter: React.FC<StopsFilterProps> = ({
       </Typography>
       <FormGroup>
         {STOP_OPTIONS.map((option) => (
-          <FormControlLabel
+          <StopCheckbox
             key={option.value}
+            option={option}
+            isSelected={selectedSet.has(option.value)}
             disabled={disabled}
-            control={
-              <Checkbox
-                checked={selectedStops.includes(option.value)}
-                onChange={() => handleChange(option.value)}
-                size="small"
-              />
-            }
-            label={
-              <Box>
-                <Typography variant="body2">{option.label}</Typography>
-              </Box>
-            }
-            sx={{
-              ml: 0,
-              mb: 0.5,
-              '& .MuiFormControlLabel-label': {
-                flex: 1,
-              },
-            }}
+            onChange={handleToggle}
           />
         ))}
       </FormGroup>
     </Box>
   );
 };
+
+// Custom comparison for memoization
+const arePropsEqual = (
+  prevProps: StopsFilterProps,
+  nextProps: StopsFilterProps
+): boolean => {
+  // Compare selected stops array
+  if (prevProps.selectedStops.length !== nextProps.selectedStops.length) return false;
+  if (prevProps.selectedStops.some((stop, i) => stop !== nextProps.selectedStops[i])) {
+    return false;
+  }
+  
+  // Compare disabled
+  return prevProps.disabled === nextProps.disabled;
+};
+
+export const StopsFilter = React.memo(StopsFilterComponent, arePropsEqual);
 
 export default StopsFilter;

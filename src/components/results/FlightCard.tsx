@@ -46,6 +46,34 @@ interface FlightCardProps {
 }
 
 // -----------------------------------------------------------------------------
+// Helper Functions
+// -----------------------------------------------------------------------------
+
+/**
+ * Safely format a value with a fallback for undefined/null
+ */
+const safeValue = (value: string | number | undefined | null, fallback = '—'): string => {
+  if (value === undefined || value === null || value === '') {
+    return fallback;
+  }
+  return String(value);
+};
+
+/**
+ * Format flight number with carrier code, handling undefined gracefully
+ */
+const formatFlightNumber = (carrierCode?: string, flightNumber?: string, carrierName?: string): string => {
+  const displayName = carrierName || safeValue(carrierCode, '');
+  const flight = safeValue(flightNumber, '');
+  
+  if (!displayName && !flight) return 'Flight TBD';
+  if (!flight) return displayName;
+  if (!displayName) return flight;
+  
+  return `${displayName} ${flight}`;
+};
+
+// -----------------------------------------------------------------------------
 // Segment Display Component
 // -----------------------------------------------------------------------------
 
@@ -61,16 +89,16 @@ const SegmentDisplay: React.FC<SegmentDisplayProps> = ({
   <Box sx={{ py: 1 }}>
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
       <Typography variant="caption" color="text.secondary">
-        {carrierName || segment.carrierCode} {segment.flightNumber}
+        {formatFlightNumber(segment.carrierCode, segment.flightNumber, carrierName)}
       </Typography>
     </Box>
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
       <Box sx={{ textAlign: 'center', minWidth: 60 }}>
         <Typography variant="h6" fontWeight={600}>
-          {formatTime(segment.departure.at)}
+          {segment.departure?.at ? formatTime(segment.departure.at) : '—'}
         </Typography>
         <Typography variant="caption" color="text.secondary">
-          {segment.departure.iataCode}
+          {safeValue(segment.departure?.iataCode)}
         </Typography>
       </Box>
       <Box
@@ -82,7 +110,7 @@ const SegmentDisplay: React.FC<SegmentDisplayProps> = ({
         }}
       >
         <Typography variant="caption" color="text.secondary">
-          {formatIsoDuration(segment.duration)}
+          {segment.duration ? formatIsoDuration(segment.duration) : '—'}
         </Typography>
         <Box
           sx={{
@@ -117,10 +145,10 @@ const SegmentDisplay: React.FC<SegmentDisplayProps> = ({
       </Box>
       <Box sx={{ textAlign: 'center', minWidth: 60 }}>
         <Typography variant="h6" fontWeight={600}>
-          {formatTime(segment.arrival.at)}
+          {segment.arrival?.at ? formatTime(segment.arrival.at) : '—'}
         </Typography>
         <Typography variant="caption" color="text.secondary">
-          {segment.arrival.iataCode}
+          {safeValue(segment.arrival?.iataCode)}
         </Typography>
       </Box>
     </Box>
@@ -259,10 +287,10 @@ const ItineraryDisplay: React.FC<ItineraryDisplayProps> = ({
 };
 
 // -----------------------------------------------------------------------------
-// Main Flight Card Component
+// Main Flight Card Component (Memoized for performance)
 // -----------------------------------------------------------------------------
 
-export const FlightCard: React.FC<FlightCardProps> = ({
+const FlightCardComponent: React.FC<FlightCardProps> = ({
   flight,
   carriers,
   onSelect,
@@ -270,8 +298,18 @@ export const FlightCard: React.FC<FlightCardProps> = ({
 }) => {
   const [expanded, setExpanded] = React.useState(false);
 
-  const price = parseFloat(flight.price.grandTotal);
+  // Memoize derived values
+  const price = React.useMemo(() => parseFloat(flight.price.grandTotal), [flight.price.grandTotal]);
   const currency = flight.price.currency;
+
+  // Memoize handlers
+  const handleSelect = React.useCallback(() => {
+    onSelect?.(flight);
+  }, [onSelect, flight]);
+
+  const handleToggleExpand = React.useCallback(() => {
+    setExpanded((prev) => !prev);
+  }, []);
 
   return (
     <Card
@@ -349,7 +387,7 @@ export const FlightCard: React.FC<FlightCardProps> = ({
             <Button
               variant="contained"
               color="secondary"
-              onClick={() => onSelect?.(flight)}
+              onClick={handleSelect}
               sx={{ mt: 1 }}
             >
               Select
@@ -370,7 +408,7 @@ export const FlightCard: React.FC<FlightCardProps> = ({
         <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
           <IconButton
             size="small"
-            onClick={() => setExpanded(!expanded)}
+            onClick={handleToggleExpand}
             sx={{ color: 'text.secondary' }}
           >
             {expanded ? <ExpandLess /> : <ExpandMore />}
@@ -406,13 +444,13 @@ export const FlightCard: React.FC<FlightCardProps> = ({
                       >
                         <Typography variant="caption" fontWeight={500}>
                           Connection at{' '}
-                          {segment.departure.iataCode}
+                          {safeValue(segment.departure?.iataCode)}
                         </Typography>
                       </Box>
                     )}
                     <SegmentDisplay
                       segment={segment}
-                      carrierName={carriers?.[segment.carrierCode]}
+                      carrierName={segment.carrierCode ? carriers?.[segment.carrierCode] : undefined}
                     />
                   </Box>
                 ))}
@@ -424,5 +462,32 @@ export const FlightCard: React.FC<FlightCardProps> = ({
     </Card>
   );
 };
+
+// Custom comparison function for React.memo
+const arePropsEqual = (
+  prevProps: FlightCardProps,
+  nextProps: FlightCardProps
+): boolean => {
+  // Compare flight by ID (most efficient)
+  if (prevProps.flight.id !== nextProps.flight.id) return false;
+  
+  // Compare isLowest flag
+  if (prevProps.isLowest !== nextProps.isLowest) return false;
+  
+  // Compare price (in case it changed)
+  if (prevProps.flight.price.grandTotal !== nextProps.flight.price.grandTotal) return false;
+  
+  // Carriers reference can change but content stays same, so compare keys
+  const prevCarrierKeys = prevProps.carriers ? Object.keys(prevProps.carriers).join(',') : '';
+  const nextCarrierKeys = nextProps.carriers ? Object.keys(nextProps.carriers).join(',') : '';
+  if (prevCarrierKeys !== nextCarrierKeys) return false;
+  
+  // onSelect is a callback, reference comparison is sufficient
+  // since parent should use useCallback
+  return true;
+};
+
+// Wrap with React.memo for performance optimization
+export const FlightCard = React.memo(FlightCardComponent, arePropsEqual);
 
 export default FlightCard;

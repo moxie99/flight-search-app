@@ -1,9 +1,9 @@
 // ============================================================================
 // Airline Filter Component
-// Multi-select airline filter with flight counts
+// Multi-select airline filter with debounced search (optimized for performance)
 // ============================================================================
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -15,6 +15,7 @@ import {
   Button,
 } from '@mui/material';
 import { Search, ExpandMore, ExpandLess } from '@mui/icons-material';
+import { useDebounce } from '../../hooks';
 
 // -----------------------------------------------------------------------------
 // Types
@@ -35,10 +36,89 @@ interface AirlineFilterProps {
 }
 
 // -----------------------------------------------------------------------------
+// Constants
+// -----------------------------------------------------------------------------
+
+const SEARCH_DEBOUNCE_DELAY = 200; // ms
+
+// -----------------------------------------------------------------------------
+// Airline Checkbox Item (Memoized)
+// -----------------------------------------------------------------------------
+
+interface AirlineCheckboxProps {
+  airline: AirlineOption;
+  isSelected: boolean;
+  disabled: boolean;
+  onChange: (code: string) => void;
+}
+
+const AirlineCheckbox: React.FC<AirlineCheckboxProps> = React.memo(
+  ({ airline, isSelected, disabled, onChange }) => {
+    const handleChange = useCallback(() => {
+      onChange(airline.code);
+    }, [airline.code, onChange]);
+
+    return (
+      <FormControlLabel
+        disabled={disabled}
+        control={
+          <Checkbox
+            checked={isSelected}
+            onChange={handleChange}
+            size="small"
+          />
+        }
+        label={
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              width: '100%',
+            }}
+          >
+            <Typography
+              variant="body2"
+              sx={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                flex: 1,
+                mr: 1,
+              }}
+            >
+              {airline.name}
+            </Typography>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ flexShrink: 0 }}
+            >
+              ({airline.count})
+            </Typography>
+          </Box>
+        }
+        sx={{
+          ml: 0,
+          mb: 0.5,
+          width: '100%',
+          '& .MuiFormControlLabel-label': {
+            flex: 1,
+            overflow: 'hidden',
+          },
+        }}
+      />
+    );
+  }
+);
+
+AirlineCheckbox.displayName = 'AirlineCheckbox';
+
+// -----------------------------------------------------------------------------
 // Component
 // -----------------------------------------------------------------------------
 
-export const AirlineFilter: React.FC<AirlineFilterProps> = ({
+const AirlineFilterComponent: React.FC<AirlineFilterProps> = ({
   airlines,
   selectedAirlines,
   onChange,
@@ -48,34 +128,67 @@ export const AirlineFilter: React.FC<AirlineFilterProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [showAll, setShowAll] = useState(false);
 
-  // Filter airlines by search term
-  const filteredAirlines = airlines.filter(
-    (airline) =>
-      airline.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      airline.code.toLowerCase().includes(searchTerm.toLowerCase())
+  // Debounce search term for filtering
+  const debouncedSearchTerm = useDebounce(searchTerm, SEARCH_DEBOUNCE_DELAY);
+
+  // Memoized filtered airlines
+  const filteredAirlines = useMemo(() => {
+    if (!debouncedSearchTerm) return airlines;
+    
+    const searchLower = debouncedSearchTerm.toLowerCase();
+    return airlines.filter(
+      (airline) =>
+        airline.name.toLowerCase().includes(searchLower) ||
+        airline.code.toLowerCase().includes(searchLower)
+    );
+  }, [airlines, debouncedSearchTerm]);
+
+  // Memoized visible airlines
+  const visibleAirlines = useMemo(() => {
+    return showAll ? filteredAirlines : filteredAirlines.slice(0, maxVisible);
+  }, [filteredAirlines, showAll, maxVisible]);
+
+  // Derived state
+  const hasMore = filteredAirlines.length > maxVisible;
+  const remainingCount = filteredAirlines.length - maxVisible;
+  const allSelected = selectedAirlines.length === filteredAirlines.length && filteredAirlines.length > 0;
+
+  // Selected airlines set for O(1) lookup
+  const selectedSet = useMemo(
+    () => new Set(selectedAirlines),
+    [selectedAirlines]
   );
 
-  // Show limited or all airlines
-  const visibleAirlines = showAll
-    ? filteredAirlines
-    : filteredAirlines.slice(0, maxVisible);
-  const hasMore = filteredAirlines.length > maxVisible;
+  // Memoized handlers
+  const handleSearchChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setSearchTerm(e.target.value);
+    },
+    []
+  );
 
-  const handleChange = (airlineCode: string) => {
-    if (selectedAirlines.includes(airlineCode)) {
-      onChange(selectedAirlines.filter((code) => code !== airlineCode));
-    } else {
-      onChange([...selectedAirlines, airlineCode]);
-    }
-  };
+  const handleAirlineToggle = useCallback(
+    (airlineCode: string) => {
+      if (selectedAirlines.includes(airlineCode)) {
+        onChange(selectedAirlines.filter((code) => code !== airlineCode));
+      } else {
+        onChange([...selectedAirlines, airlineCode]);
+      }
+    },
+    [selectedAirlines, onChange]
+  );
 
-  const handleSelectAll = () => {
-    if (selectedAirlines.length === filteredAirlines.length) {
+  const handleSelectAll = useCallback(() => {
+    if (allSelected) {
       onChange([]);
     } else {
       onChange(filteredAirlines.map((a) => a.code));
     }
-  };
+  }, [allSelected, filteredAirlines, onChange]);
+
+  const handleToggleShowAll = useCallback(() => {
+    setShowAll((prev) => !prev);
+  }, []);
 
   if (airlines.length === 0) {
     return null;
@@ -94,7 +207,7 @@ export const AirlineFilter: React.FC<AirlineFilterProps> = ({
           fullWidth
           placeholder="Search airlines..."
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={handleSearchChange}
           disabled={disabled}
           InputProps={{
             startAdornment: (
@@ -116,9 +229,7 @@ export const AirlineFilter: React.FC<AirlineFilterProps> = ({
             disabled={disabled}
             sx={{ textTransform: 'none', p: 0, minWidth: 'auto' }}
           >
-            {selectedAirlines.length === filteredAirlines.length
-              ? 'Deselect all'
-              : 'Select all'}
+            {allSelected ? 'Deselect all' : 'Select all'}
           </Button>
         </Box>
       )}
@@ -126,81 +237,59 @@ export const AirlineFilter: React.FC<AirlineFilterProps> = ({
       {/* Airline Checkboxes */}
       <FormGroup>
         {visibleAirlines.map((airline) => (
-          <FormControlLabel
+          <AirlineCheckbox
             key={airline.code}
+            airline={airline}
+            isSelected={selectedSet.has(airline.code)}
             disabled={disabled}
-            control={
-              <Checkbox
-                checked={selectedAirlines.includes(airline.code)}
-                onChange={() => handleChange(airline.code)}
-                size="small"
-              />
-            }
-            label={
-              <Box
-                sx={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  width: '100%',
-                }}
-              >
-                <Typography
-                  variant="body2"
-                  sx={{
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    flex: 1,
-                    mr: 1,
-                  }}
-                >
-                  {airline.name}
-                </Typography>
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ flexShrink: 0 }}
-                >
-                  ({airline.count})
-                </Typography>
-              </Box>
-            }
-            sx={{
-              ml: 0,
-              mb: 0.5,
-              width: '100%',
-              '& .MuiFormControlLabel-label': {
-                flex: 1,
-                overflow: 'hidden',
-              },
-            }}
+            onChange={handleAirlineToggle}
           />
         ))}
       </FormGroup>
 
       {/* Show More/Less */}
-      {hasMore && !searchTerm && (
+      {hasMore && !debouncedSearchTerm && (
         <Button
           size="small"
-          onClick={() => setShowAll(!showAll)}
+          onClick={handleToggleShowAll}
           endIcon={showAll ? <ExpandLess /> : <ExpandMore />}
           sx={{ mt: 1, textTransform: 'none' }}
         >
-          {showAll
-            ? 'Show less'
-            : `Show ${filteredAirlines.length - maxVisible} more`}
+          {showAll ? 'Show less' : `Show ${remainingCount} more`}
         </Button>
       )}
 
       {/* No Results */}
-      {filteredAirlines.length === 0 && searchTerm && (
+      {filteredAirlines.length === 0 && debouncedSearchTerm && (
         <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
-          No airlines match "{searchTerm}"
+          No airlines match "{debouncedSearchTerm}"
         </Typography>
       )}
     </Box>
   );
 };
+
+// Custom comparison for memoization
+const arePropsEqual = (
+  prevProps: AirlineFilterProps,
+  nextProps: AirlineFilterProps
+): boolean => {
+  // Compare airlines array by length and codes
+  if (prevProps.airlines.length !== nextProps.airlines.length) return false;
+  
+  // Compare selected airlines
+  if (prevProps.selectedAirlines.length !== nextProps.selectedAirlines.length) return false;
+  if (prevProps.selectedAirlines.some((code, i) => code !== nextProps.selectedAirlines[i])) {
+    return false;
+  }
+  
+  // Compare other props
+  return (
+    prevProps.disabled === nextProps.disabled &&
+    prevProps.maxVisible === nextProps.maxVisible
+  );
+};
+
+export const AirlineFilter = React.memo(AirlineFilterComponent, arePropsEqual);
 
 export default AirlineFilter;

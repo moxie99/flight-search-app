@@ -1,9 +1,9 @@
 // ============================================================================
 // Quick Filters Component
-// Horizontal scrollable filter chips for quick access
+// Horizontal scrollable filter chips (optimized with memoization)
 // ============================================================================
 
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Box, Chip, Typography } from '@mui/material';
 import {
   FlightTakeoff,
@@ -11,6 +11,10 @@ import {
   Schedule,
 } from '@mui/icons-material';
 import type { StopFilter } from '../../types';
+
+// -----------------------------------------------------------------------------
+// Types
+// -----------------------------------------------------------------------------
 
 interface QuickFiltersProps {
   selectedStops: StopFilter[];
@@ -20,28 +24,82 @@ interface QuickFiltersProps {
   currency?: string;
 }
 
-export const QuickFilters: React.FC<QuickFiltersProps> = ({
+// -----------------------------------------------------------------------------
+// Filter Chip (Memoized)
+// -----------------------------------------------------------------------------
+
+interface StopFilterChipProps {
+  stop: StopFilter;
+  label: string;
+  icon?: React.ReactElement;
+  isSelected: boolean;
+  onToggle: (stop: StopFilter) => void;
+}
+
+const StopFilterChip: React.FC<StopFilterChipProps> = React.memo(
+  ({ stop, label, icon, isSelected, onToggle }) => {
+    const handleClick = useCallback(() => {
+      onToggle(stop);
+    }, [stop, onToggle]);
+
+    return (
+      <Chip
+        icon={icon}
+        label={label}
+        onClick={handleClick}
+        color={isSelected ? 'primary' : 'default'}
+        variant={isSelected ? 'filled' : 'outlined'}
+        sx={{
+          transition: 'all 0.2s ease',
+          '&:hover': {
+            transform: 'translateY(-1px)',
+          },
+        }}
+      />
+    );
+  }
+);
+
+StopFilterChip.displayName = 'StopFilterChip';
+
+// -----------------------------------------------------------------------------
+// Component
+// -----------------------------------------------------------------------------
+
+const QuickFiltersComponent: React.FC<QuickFiltersProps> = ({
   selectedStops,
   onStopsChange,
   cheapestPrice,
   fastestDuration,
   currency = 'USD',
 }) => {
-  const toggleStop = (stop: StopFilter) => {
-    if (selectedStops.includes(stop)) {
-      onStopsChange(selectedStops.filter((s) => s !== stop));
-    } else {
-      onStopsChange([...selectedStops, stop]);
-    }
-  };
+  // Memoized selected stops set for O(1) lookup
+  const selectedSet = useMemo(
+    () => new Set(selectedStops),
+    [selectedStops]
+  );
 
-  const formatPrice = (price: number) => {
+  // Memoized toggle handler
+  const toggleStop = useCallback(
+    (stop: StopFilter) => {
+      if (selectedStops.includes(stop)) {
+        onStopsChange(selectedStops.filter((s) => s !== stop));
+      } else {
+        onStopsChange([...selectedStops, stop]);
+      }
+    },
+    [selectedStops, onStopsChange]
+  );
+
+  // Memoized price formatter
+  const formattedCheapest = useMemo(() => {
+    if (!cheapestPrice) return null;
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency,
       minimumFractionDigits: 0,
-    }).format(price);
-  };
+    }).format(cheapestPrice);
+  }, [cheapestPrice, currency]);
 
   return (
     <Box sx={{ mb: 3 }}>
@@ -57,39 +115,27 @@ export const QuickFilters: React.FC<QuickFiltersProps> = ({
         }}
       >
         {/* Non-stop filter */}
-        <Chip
-          icon={<FlightTakeoff sx={{ fontSize: 18 }} />}
+        <StopFilterChip
+          stop="non-stop"
           label="Non-stop only"
-          onClick={() => toggleStop('non-stop')}
-          color={selectedStops.includes('non-stop') ? 'primary' : 'default'}
-          variant={selectedStops.includes('non-stop') ? 'filled' : 'outlined'}
-          sx={{
-            transition: 'all 0.2s ease',
-            '&:hover': {
-              transform: 'translateY(-1px)',
-            },
-          }}
+          icon={<FlightTakeoff sx={{ fontSize: 18 }} />}
+          isSelected={selectedSet.has('non-stop')}
+          onToggle={toggleStop}
         />
 
         {/* 1 Stop filter */}
-        <Chip
+        <StopFilterChip
+          stop="1-stop"
           label="1 stop max"
-          onClick={() => toggleStop('1-stop')}
-          color={selectedStops.includes('1-stop') ? 'primary' : 'default'}
-          variant={selectedStops.includes('1-stop') ? 'filled' : 'outlined'}
-          sx={{
-            transition: 'all 0.2s ease',
-            '&:hover': {
-              transform: 'translateY(-1px)',
-            },
-          }}
+          isSelected={selectedSet.has('1-stop')}
+          onToggle={toggleStop}
         />
 
         {/* Cheapest indicator */}
-        {cheapestPrice && (
+        {formattedCheapest && (
           <Chip
             icon={<AttachMoney sx={{ fontSize: 18 }} />}
-            label={`Cheapest: ${formatPrice(cheapestPrice)}`}
+            label={`Cheapest: ${formattedCheapest}`}
             color="success"
             variant="outlined"
             sx={{
@@ -114,5 +160,26 @@ export const QuickFilters: React.FC<QuickFiltersProps> = ({
     </Box>
   );
 };
+
+// Custom comparison for memoization
+const arePropsEqual = (
+  prevProps: QuickFiltersProps,
+  nextProps: QuickFiltersProps
+): boolean => {
+  // Compare selected stops
+  if (prevProps.selectedStops.length !== nextProps.selectedStops.length) return false;
+  if (prevProps.selectedStops.some((stop, i) => stop !== nextProps.selectedStops[i])) {
+    return false;
+  }
+  
+  // Compare other props
+  return (
+    prevProps.cheapestPrice === nextProps.cheapestPrice &&
+    prevProps.fastestDuration === nextProps.fastestDuration &&
+    prevProps.currency === nextProps.currency
+  );
+};
+
+export const QuickFilters = React.memo(QuickFiltersComponent, arePropsEqual);
 
 export default QuickFilters;
