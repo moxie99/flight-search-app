@@ -3,7 +3,7 @@
 // Modern modal showing full flight details when user selects a flight
 // ============================================================================
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -20,6 +20,8 @@ import {
   Step,
   StepLabel,
   StepContent,
+  Tabs,
+  Tab,
   useTheme,
   useMediaQuery,
   alpha,
@@ -31,10 +33,11 @@ import {
   FlightLand,
   AccessTime,
   AirlineSeatReclineNormal,
-  Luggage,
   CheckCircle,
   Schedule,
   Flight,
+  EventSeat,
+  Info,
 } from '@mui/icons-material';
 import type { FlightOffer } from '../../types';
 import {
@@ -45,6 +48,7 @@ import {
   formatStops,
   getStopCount,
 } from '../../utils/formatters';
+import { SeatmapView } from '../seatmap';
 
 // -----------------------------------------------------------------------------
 // Types
@@ -57,6 +61,34 @@ interface FlightDetailsModalProps {
   carriers?: Record<string, string>;
   onConfirm?: (flight: FlightOffer) => void;
 }
+
+// -----------------------------------------------------------------------------
+// Helper Functions
+// -----------------------------------------------------------------------------
+
+/**
+ * Safely format a value with a fallback for undefined/null
+ */
+const safeValue = (value: string | number | undefined | null, fallback = '—'): string => {
+  if (value === undefined || value === null || value === '') {
+    return fallback;
+  }
+  return String(value);
+};
+
+/**
+ * Format flight number with carrier code, handling undefined gracefully
+ */
+const formatFlightNumber = (carrierCode?: string, flightNumber?: string): string => {
+  const carrier = safeValue(carrierCode, '');
+  const flight = safeValue(flightNumber, '');
+  
+  if (!carrier && !flight) return 'Flight TBD';
+  if (!flight) return carrier;
+  if (!carrier) return flight;
+  
+  return `${carrier} ${flight}`;
+};
 
 // -----------------------------------------------------------------------------
 // Flight Segment Timeline
@@ -97,7 +129,7 @@ const SegmentTimeline: React.FC<SegmentTimelineProps> = ({
           {label} Flight
         </Typography>
         <Chip
-          label={formatIsoDuration(itinerary.duration)}
+          label={itinerary.duration ? formatIsoDuration(itinerary.duration) : '—'}
           size="small"
           icon={<AccessTime sx={{ fontSize: 14 }} />}
           sx={{ ml: 'auto' }}
@@ -106,7 +138,8 @@ const SegmentTimeline: React.FC<SegmentTimelineProps> = ({
 
       <Stepper orientation="vertical" sx={{ ml: 1 }}>
         {itinerary.segments.map((segment, index) => {
-          const carrierName = carriers?.[segment.carrierCode] || segment.carrierCode;
+          const carrierCode = segment.carrierCode || '';
+          const carrierName = carriers?.[carrierCode] || carrierCode || 'Unknown Airline';
           const isLastSegment = index === itinerary.segments.length - 1;
 
           return (
@@ -137,17 +170,17 @@ const SegmentTimeline: React.FC<SegmentTimelineProps> = ({
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                   <Box>
                     <Typography variant="h6" fontWeight={700}>
-                      {formatTime(segment.departure.at)}
+                      {segment.departure?.at ? formatTime(segment.departure.at) : '—'}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      {formatDate(segment.departure.at)}
+                      {segment.departure?.at ? formatDate(segment.departure.at) : '—'}
                     </Typography>
                   </Box>
                   <Box>
                     <Typography variant="body1" fontWeight={600}>
-                      {segment.departure.iataCode}
+                      {safeValue(segment.departure?.iataCode)}
                     </Typography>
-                    {segment.departure.terminal && (
+                    {segment.departure?.terminal && (
                       <Typography variant="caption" color="text.secondary">
                         Terminal {segment.departure.terminal}
                       </Typography>
@@ -170,7 +203,7 @@ const SegmentTimeline: React.FC<SegmentTimelineProps> = ({
                       {carrierName}
                     </Typography>
                     <Chip
-                      label={`${segment.carrierCode} ${segment.flightNumber}`}
+                      label={formatFlightNumber(segment.carrierCode, segment.flightNumber)}
                       size="small"
                       variant="outlined"
                     />
@@ -179,7 +212,7 @@ const SegmentTimeline: React.FC<SegmentTimelineProps> = ({
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                       <Schedule sx={{ fontSize: 16, color: 'text.secondary' }} />
                       <Typography variant="caption" color="text.secondary">
-                        {formatIsoDuration(segment.duration)}
+                        {segment.duration ? formatIsoDuration(segment.duration) : '—'}
                       </Typography>
                     </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -212,17 +245,17 @@ const SegmentTimeline: React.FC<SegmentTimelineProps> = ({
                   </Box>
                   <Box>
                     <Typography variant="h6" fontWeight={700}>
-                      {formatTime(segment.arrival.at)}
+                      {segment.arrival?.at ? formatTime(segment.arrival.at) : '—'}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      {formatDate(segment.arrival.at)}
+                      {segment.arrival?.at ? formatDate(segment.arrival.at) : '—'}
                     </Typography>
                   </Box>
                   <Box>
                     <Typography variant="body1" fontWeight={600}>
-                      {segment.arrival.iataCode}
+                      {safeValue(segment.arrival?.iataCode)}
                     </Typography>
-                    {segment.arrival.terminal && (
+                    {segment.arrival?.terminal && (
                       <Typography variant="caption" color="text.secondary">
                         Terminal {segment.arrival.terminal}
                       </Typography>
@@ -241,7 +274,7 @@ const SegmentTimeline: React.FC<SegmentTimelineProps> = ({
                     }}
                   >
                     <Typography variant="body2" fontWeight={500}>
-                      ⏱️ Connection at {segment.arrival.iataCode}
+                      ⏱️ Connection at {safeValue(segment.arrival?.iataCode)}
                     </Typography>
                   </Paper>
                 )}
@@ -250,6 +283,29 @@ const SegmentTimeline: React.FC<SegmentTimelineProps> = ({
           );
         })}
       </Stepper>
+    </Box>
+  );
+};
+
+// -----------------------------------------------------------------------------
+// Tab Panel Component
+// -----------------------------------------------------------------------------
+
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+const TabPanel: React.FC<TabPanelProps> = ({ children, value, index }) => {
+  return (
+    <Box
+      role="tabpanel"
+      hidden={value !== index}
+      id={`flight-tabpanel-${index}`}
+      aria-labelledby={`flight-tab-${index}`}
+    >
+      {value === index && children}
     </Box>
   );
 };
@@ -267,6 +323,14 @@ export const FlightDetailsModal: React.FC<FlightDetailsModalProps> = ({
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [activeTab, setActiveTab] = useState(0);
+
+  // Reset tab when modal closes
+  React.useEffect(() => {
+    if (!open) {
+      setActiveTab(0);
+    }
+  }, [open]);
 
   if (!flight) return null;
 
@@ -282,11 +346,15 @@ export const FlightDetailsModal: React.FC<FlightDetailsModalProps> = ({
     onClose();
   };
 
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
+    setActiveTab(newValue);
+  };
+
   return (
     <Dialog
       open={open}
       onClose={onClose}
-      maxWidth="md"
+      maxWidth="lg"
       fullWidth
       fullScreen={isMobile}
       TransitionComponent={Fade}
@@ -295,6 +363,7 @@ export const FlightDetailsModal: React.FC<FlightDetailsModalProps> = ({
         sx: {
           borderRadius: isMobile ? 0 : 3,
           overflow: 'hidden',
+          maxHeight: isMobile ? '100%' : '90vh',
         },
       }}
     >
@@ -343,82 +412,132 @@ export const FlightDetailsModal: React.FC<FlightDetailsModalProps> = ({
         </IconButton>
       </DialogTitle>
 
+      {/* Tabs */}
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', backgroundColor: 'grey.50' }}>
+        <Tabs
+          value={activeTab}
+          onChange={handleTabChange}
+          variant={isMobile ? 'fullWidth' : 'standard'}
+          sx={{
+            px: 2,
+            '& .MuiTab-root': {
+              textTransform: 'none',
+              fontWeight: 600,
+              minHeight: 56,
+            },
+          }}
+        >
+          <Tab
+            icon={<Info sx={{ fontSize: 20 }} />}
+            iconPosition="start"
+            label="Flight Details"
+            id="flight-tab-0"
+            aria-controls="flight-tabpanel-0"
+          />
+          <Tab
+            icon={<EventSeat sx={{ fontSize: 20 }} />}
+            iconPosition="start"
+            label="Select Seats"
+            id="flight-tab-1"
+            aria-controls="flight-tabpanel-1"
+          />
+        </Tabs>
+      </Box>
+
       <DialogContent sx={{ p: 0 }}>
-        {/* Summary Bar */}
-        <Box
-          sx={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 2,
-            p: 2,
-            backgroundColor: 'grey.50',
-            borderBottom: 1,
-            borderColor: 'divider',
-          }}
-        >
-          <Chip
-            icon={<Flight sx={{ transform: 'rotate(45deg)' }} />}
-            label={`${flight.itineraries.length === 2 ? 'Round Trip' : 'One Way'}`}
-            color="primary"
-            variant="outlined"
-          />
-          <Chip
-            label={formatStops(totalStops)}
-            color={totalStops === 0 ? 'success' : 'default'}
-            variant="outlined"
-          />
-          <Chip
-            icon={<AirlineSeatReclineNormal />}
-            label={`${flight.numberOfBookableSeats} seats left`}
-            variant="outlined"
-          />
-        </Box>
+        {/* Tab 0: Flight Details */}
+        <TabPanel value={activeTab} index={0}>
+          {/* Summary Bar */}
+          <Box
+            sx={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 2,
+              p: 2,
+              backgroundColor: 'grey.50',
+              borderBottom: 1,
+              borderColor: 'divider',
+            }}
+          >
+            <Chip
+              icon={<Flight sx={{ transform: 'rotate(45deg)' }} />}
+              label={`${flight.itineraries.length === 2 ? 'Round Trip' : 'One Way'}`}
+              color="primary"
+              variant="outlined"
+            />
+            <Chip
+              label={formatStops(totalStops)}
+              color={totalStops === 0 ? 'success' : 'default'}
+              variant="outlined"
+            />
+            <Chip
+              icon={<AirlineSeatReclineNormal />}
+              label={`${flight.numberOfBookableSeats} seats left`}
+              variant="outlined"
+            />
+          </Box>
 
-        {/* Flight Details */}
-        <Box sx={{ p: 3 }}>
-          {flight.itineraries.map((itinerary, idx) => (
-            <React.Fragment key={idx}>
-              {idx > 0 && <Divider sx={{ my: 3 }} />}
-              <SegmentTimeline
-                itinerary={itinerary}
-                carriers={carriers}
-                label={idx === 0 ? 'Outbound' : 'Return'}
-              />
-            </React.Fragment>
-          ))}
-        </Box>
+          {/* Flight Details */}
+          <Box sx={{ p: 3 }}>
+            {flight.itineraries.map((itinerary, idx) => (
+              <React.Fragment key={idx}>
+                {idx > 0 && <Divider sx={{ my: 3 }} />}
+                <SegmentTimeline
+                  itinerary={itinerary}
+                  carriers={carriers}
+                  label={idx === 0 ? 'Outbound' : 'Return'}
+                />
+              </React.Fragment>
+            ))}
+          </Box>
 
-        {/* Price Summary */}
-        <Box
-          sx={{
-            p: 3,
-            backgroundColor: alpha(theme.palette.success.main, 0.05),
-            borderTop: 1,
-            borderColor: 'divider',
-          }}
-        >
-          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-            Price Summary
-          </Typography>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Box>
-              <Typography variant="body2" color="text.secondary">
-                Base fare (per person)
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                Taxes & fees included
-              </Typography>
-            </Box>
-            <Box sx={{ textAlign: 'right' }}>
-              <Typography variant="h4" fontWeight={700} color="success.main">
-                {formatPrice(price, currency)}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Total price per traveler
-              </Typography>
+          {/* Price Summary */}
+          <Box
+            sx={{
+              p: 3,
+              backgroundColor: alpha(theme.palette.success.main, 0.05),
+              borderTop: 1,
+              borderColor: 'divider',
+            }}
+          >
+            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+              Price Summary
+            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Box>
+                <Typography variant="body2" color="text.secondary">
+                  Base fare (per person)
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  Taxes & fees included
+                </Typography>
+              </Box>
+              <Box sx={{ textAlign: 'right' }}>
+                <Typography variant="h4" fontWeight={700} color="success.main">
+                  {formatPrice(price, currency)}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Total price per traveler
+                </Typography>
+              </Box>
             </Box>
           </Box>
-        </Box>
+        </TabPanel>
+
+        {/* Tab 1: Seat Selection */}
+        <TabPanel value={activeTab} index={1}>
+          <Box sx={{ p: 3 }}>
+            <SeatmapView
+              flightOffer={flight}
+              onSeatSelect={(segmentId, seat) => {
+                console.log('Seat selected:', segmentId, seat);
+              }}
+              onSeatConfirm={(segmentId, seat) => {
+                console.log('Seat confirmed:', segmentId, seat);
+              }}
+            />
+          </Box>
+        </TabPanel>
       </DialogContent>
 
       <DialogActions

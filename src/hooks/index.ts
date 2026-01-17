@@ -5,3 +5,4 @@
 export { useFlightSearch, usePrefetchFlights } from './useFlightSearch';
 export { useAirportSearch, toAirport } from './useAirportSearch';
 export { useFlightFilters } from './useFlightFilters';
+export { useSeatmap } from './useSeatmap';

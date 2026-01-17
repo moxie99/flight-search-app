@@ -57,7 +57,7 @@ export const useFlightSearch = (
   }, [params]);
 
   const query = useQuery({
-    queryKey: queryKeys.flights.search(params as Record<string, unknown>),
+    queryKey: queryKeys.flights.search(params as unknown as Record<string, unknown>),
     queryFn: async () => {
       if (!params) throw new Error('Search parameters are required');
       const result = await amadeusApi.searchFlights(params);
@@ -101,7 +101,7 @@ export const usePrefetchFlights = () => {
 
   const prefetch = async (params: FlightSearchParams) => {
     await queryClient.prefetchQuery({
-      queryKey: queryKeys.flights.search(params as Record<string, unknown>),
+      queryKey: queryKeys.flights.search(params as unknown as Record<string, unknown>),
       queryFn: () => amadeusApi.searchFlights(params),
       staleTime: CACHE_TIME.FLIGHTS,
     });

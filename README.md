@@ -1,4 +1,4 @@
-# ✈️ SkySearch - Flight Search Engine
+# ✈️ SpotterSearch - Flight Search Engine
 
 A modern, responsive flight search engine built with React, TypeScript, Material UI, and TanStack React Query. This application demonstrates enterprise-grade architecture and best practices for building scalable React applications.
 

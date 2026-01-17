@@ -9,7 +9,6 @@ import {
   FlightTakeoff,
   AttachMoney,
   Schedule,
-  Star,
 } from '@mui/icons-material';
 import type { StopFilter } from '../../types';
 

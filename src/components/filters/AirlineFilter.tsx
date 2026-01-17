@@ -12,7 +12,6 @@ import {
   Checkbox,
   TextField,
   InputAdornment,
-  Collapse,
   Button,
 } from '@mui/material';
 import { Search, ExpandMore, ExpandLess } from '@mui/icons-material';

@@ -22,7 +22,6 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import type { TooltipProps } from 'recharts';
 import type { FlightOffer } from '../../types';
 import { formatPrice } from '../../utils/formatters';
 
@@ -48,14 +47,16 @@ interface PriceDataPoint {
 // Custom Tooltip
 // -----------------------------------------------------------------------------
 
-const CustomTooltip: React.FC<TooltipProps<number, string>> = ({
-  active,
-  payload,
-  label,
-}) => {
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: Array<{ payload: PriceDataPoint }>;
+  label?: string;
+}
+
+const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label }) => {
   if (!active || !payload || !payload[0]) return null;
 
-  const data = payload[0].payload as PriceDataPoint;
+  const data = payload[0].payload;
 
   return (
     <Paper

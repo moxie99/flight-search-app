@@ -206,7 +206,8 @@ export const SearchForm: React.FC<SearchFormProps> = ({
   isLoading = false,
 }) => {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  // Media query for responsive design (kept for future use)
+  useMediaQuery(theme.breakpoints.down('md'));
 
   const [formState, setFormState] = useState<FormState>({
     origin: null,

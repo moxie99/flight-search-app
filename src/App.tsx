@@ -33,6 +33,12 @@ import {
   QuickFilters,
   LoadingOverlay,
   FlightDetailsModal,
+  TrustStats,
+  PopularDestinations,
+  WhyChooseUs,
+  Testimonials,
+  NewsletterSignup,
+  Footer,
 } from './components';
 
 // Hooks
@@ -402,66 +408,21 @@ const App: React.FC = () => {
         </Box>
       )}
 
-      {/* Initial State - No Search Yet */}
+      {/* Landing Page Sections - No Search Yet */}
       {!hasSearched && (
-        <Container maxWidth="lg" sx={{ py: { xs: 4, md: 8 }, textAlign: 'center' }}>
-          <Fade in timeout={800}>
-            <Box
-              sx={{
-                py: 6,
-                px: 3,
-                borderRadius: 3,
-                backgroundColor: 'background.paper',
-                border: 1,
-                borderColor: 'divider',
-              }}
-            >
-              <Box
-                sx={{
-                  width: 80,
-                  height: 80,
-                  borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #1a365d 0%, #2c5282 100%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  mb: 3,
-                  mx: 'auto',
-                  boxShadow: '0 8px 32px rgba(26, 54, 93, 0.2)',
-                  animation: 'pulse 3s ease-in-out infinite',
-                  '@keyframes pulse': {
-                    '0%, 100%': {
-                      transform: 'scale(1)',
-                      boxShadow: '0 8px 32px rgba(26, 54, 93, 0.2)',
-                    },
-                    '50%': {
-                      transform: 'scale(1.05)',
-                      boxShadow: '0 12px 40px rgba(26, 54, 93, 0.3)',
-                    },
-                  },
-                }}
-              >
-                <Box
-                  component="svg"
-                  viewBox="0 0 24 24"
-                  sx={{
-                    width: 40,
-                    height: 40,
-                    fill: 'white',
-                    transform: 'rotate(45deg)',
-                  }}
-                >
-                  <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" />
-                </Box>
-              </Box>
-              <Box sx={{ color: 'text.secondary', maxWidth: 400, mx: 'auto' }}>
-                Enter your travel details above to search for available flights.
-                Compare prices, filter by stops, airlines, and more.
-              </Box>
-            </Box>
-          </Fade>
-        </Container>
+        <Fade in timeout={800}>
+          <Box>
+            <TrustStats />
+            <PopularDestinations />
+            <WhyChooseUs />
+            <Testimonials />
+            <NewsletterSignup />
+          </Box>
+        </Fade>
       )}
+
+      {/* Footer - Always visible */}
+      <Footer />
 
       {/* Error Snackbar */}
       <Snackbar

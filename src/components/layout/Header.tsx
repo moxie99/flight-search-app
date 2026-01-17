@@ -81,7 +81,7 @@ export const Header: React.FC = () => {
                   transition: 'color 0.3s ease',
                 }}
               >
-                SkySearch
+                SpotterSearch
               </Typography>
               <Typography
                 variant="caption"

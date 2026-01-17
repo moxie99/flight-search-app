@@ -7,3 +7,4 @@ export * from './results';
 export * from './filters';
 export * from './layout';
 export * from './common';
+export * from './seatmap';

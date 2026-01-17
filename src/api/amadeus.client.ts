@@ -10,6 +10,8 @@ import type {
   AmadeusFlightSearchResponse,
   AmadeusAirportSearchResponse,
   FlightSearchParams,
+  FlightOffer,
+  SeatmapResponse,
 } from '../types';
 
 // -----------------------------------------------------------------------------
@@ -200,6 +202,20 @@ export const amadeusApi = {
         params: {
           subType: 'AIRPORT',
         },
+      }
+    );
+    return response.data;
+  },
+
+  /**
+   * Get seatmap for a flight offer
+   * Uses POST method with flight offer data to retrieve seat availability
+   */
+  getSeatmap: async (flightOffer: FlightOffer): Promise<SeatmapResponse> => {
+    const response = await amadeusClient.post<SeatmapResponse>(
+      '/v1/shopping/seatmaps',
+      {
+        data: [flightOffer],
       }
     );
     return response.data;
